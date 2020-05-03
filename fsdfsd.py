@@ -11,17 +11,11 @@ app = Flask(__name__)
 def predict():
     # get data
     data = request.get_json(force=True)
+#    print("test1")
+#    print(data)
+#
+    filename = mainModel.percentageOfMoneyGraph(data)
 
-    if data == "percentageOfMoneyGraph":
-        filename = mainModel.percentageOfMoneyGraph(data)
-    elif data == "amountSpentDaily":
-        filename = mainModel.amountSpentDaily(data)
-    elif data == "dailyExpenses":
-        filename = mainModel.dailyExpenses(data)
-    elif data == "predictExpenses":
-        filename = mainModel.predictExpenses(data)
-    else:
-        filename="none"
     # send back to browser
     output = {'results': filename}
 

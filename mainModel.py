@@ -1,7 +1,10 @@
 import pandas as pd
+import statsmodels.regression.linear_model as sm
 import numpy as np
 import matplotlib.pyplot as plt
 from datetime import date, timedelta
+import base64
+import io
 
 city_to_country = {
         'zagreb': 'croatia',
@@ -71,6 +74,129 @@ def percentageOfMoneyGraph(sentence_text):
     ax1.pie(sums, explode=explode, labels=labels, autopct='%1.1f%%',
             shadow=True, startangle=0)
     ax1.axis('equal')
-    plt.title('percentage of money spend on each category')
-    plt.savefig('test332.png', bbox_inches='tight')
-    return 'test332.jpeg'
+    plt.title('Percentage of Money Spent on Each Category')
+    pic_IObytes = io.BytesIO()
+    plt.savefig(pic_IObytes,  format='png')
+    pic_IObytes.seek(0)
+    pic_hash = base64.b64encode(pic_IObytes.read())
+    return str(pic_hash)
+
+def dailyExpenses(sentence_text):
+    daily_expenses = []
+    all_dates = list(pd.date_range(min(df['date']), max(df['date']), freq='D'))
+    cities = []
+    for d in list(all_dates):
+        value = sum(df[df['date'] == d.date()]['eur'])
+        if value:
+            cities.append(df[df['date'] == d.date()]['city'].values[-1])
+            daily_expenses.append((d.date(), value))
+        else:
+            all_dates.remove(d)
+    dates, sums = zip(*daily_expenses)
+    ind = np.arange(len(all_dates))
+    plt.bar(ind, sums, color='red', width=0.35)
+    plt.xticks(ind, list(range(len(all_dates))))
+    plt.title('daily amount of money spend')
+    plt.xlabel('day number')
+    plt.ylabel('amount of money in eur')
+    pic_IObytes = io.BytesIO()
+    plt.savefig(pic_IObytes,  format='png')
+    pic_IObytes.seek(0)
+    pic_hash = base64.b64encode(pic_IObytes.read())
+    return str(pic_hash)
+
+def amountSpentDaily(sentence_text):
+    all_categories = tuple(set(df['category']) - set('travel'))
+    cities_daily = []
+    for city, rows in df.groupby(['city']):
+        days = set(rows['date'].values)
+        days = (max(days) - min(days)).days + 1
+        descs = {desc: sum(rs['eur'].values)/days for desc, rs in rows[rows['category'] != 'travel'].groupby(['category'])}
+        cities_daily.append((city, tuple(descs[i] if i in descs else 0 for i in all_categories)))
+
+    cities, sums = zip(*sorted(cities_daily, reverse=True, key=lambda t: sum(t[1])))
+    sums = list(zip(*sums))
+
+    ind = np.arange(len(cities))
+    width = 0.35
+    colors = ['maroon','c','orange','k','b','darkmagenta','g','m','yellow','r','peru','navy','cyan','plum','grey','teal','lime']
+    bars = [plt.bar(ind, sums[0], width, color=colors[0])]
+    for i in range(1, len(all_categories)):
+        bars.append(plt.bar(ind, sums[i], width, bottom=list(map(sum, zip(*sums[:i]))), color=colors[i]))
+
+    plt.title('amount of money spent daily per city')
+    plt.xticks(ind, cities)
+    plt.yticks(np.arange(0, 26, 1))
+    plt.legend(list(zip(*bars))[0], all_categories)
+        
+    pic_IObytes = io.BytesIO()
+    plt.savefig(pic_IObytes,  format='png')
+    pic_IObytes.seek(0)
+    pic_hash = base64.b64encode(pic_IObytes.read())
+    return str(pic_hash)
+
+def predictExpenses(sentence_text):
+    daily_expenses = []
+    all_dates = list(pd.date_range(min(df['date']), max(df['date']), freq='D'))
+    cities = []
+    for d in list(all_dates):
+        value = sum(df[df['date'] == d.date()]['eur'])
+        if value:
+            cities.append(df[df['date'] == d.date()]['city'].values[-1])
+            daily_expenses.append((d.date(), value))
+        else:
+            all_dates.remove(d)
+    dates, sums = zip(*daily_expenses)
+    # encoding strings
+    x = np.array([*zip(range(len(dates)), cities)])
+    y = sums
+    from sklearn.preprocessing import OneHotEncoder
+    from sklearn.compose import ColumnTransformer, make_column_transformer
+    preprocess = make_column_transformer((OneHotEncoder(), [-1])).fit_transform(x)
+    x = np.array([*zip(preprocess, x[:, 0])])
+
+    # avoiding the dummy variable trap
+    x = x[:, 1:]
+
+    # splitting into test set and training set
+    from sklearn.model_selection import train_test_split as tts
+    xtrain, xtest, ytrain, ytest = tts(x, y, test_size = 0.2)
+
+    # fitting the regressor to our training set
+    from sklearn.linear_model import LinearRegression
+    regressor = LinearRegression()
+    regressor.fit(xtrain, ytrain)
+
+    # applying the regressor to our test set
+    ypred = regressor.predict(xtest)
+
+    # backward elimination
+    xopt = np.hstack([np.ones((x.shape[0], 1)), x])
+
+    for i in range(xopt.shape[1]):
+        pvalues = sm.OLS(y, xopt.astype(np.float64)).fit().pvalues
+        mi = np.argmax(pvalues)
+        mp = pvalues[mi]
+        if mp > 0.05:
+            xopt = np.delete(xopt, [mi], 1)
+        else:
+            break
+
+    xtrain, xtest, ytrain, ytest = tts(xopt, y, test_size = 0.2, random_state = 0)
+    regressor = LinearRegression()
+    regressor.fit(xtrain, ytrain)
+
+    ypredopt = regressor.predict(xtest)
+
+    plt.plot(ytest, color = 'green')
+    plt.plot(ypred, color = 'navy')
+    plt.plot(ypredopt, color = 'red')
+    plt.ylabel('predicted value in eur')
+    plt.xlabel('days in the test set')
+
+    pic_IObytes = io.BytesIO()
+    plt.savefig(pic_IObytes,  format='png')
+    pic_IObytes.seek(0)
+    pic_hash = base64.b64encode(pic_IObytes.read())
+
+    return str(pic_hash)
