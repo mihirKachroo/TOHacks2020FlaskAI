@@ -17,7 +17,7 @@ mkl-fft
 mkl-random
 #mkl-service
 networkx==2.4
-numpy==1.18.1
+numpy==1.22.0
 olefile==0.46
 pandas==1.0.3
 patsy==0.5.1
